@@ -42,4 +42,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 # В production используем gunicorn вместо flask dev server.
 # 2 worker процесса достаточно для учебной нагрузки.
 # --access-logfile - выводит каждый запрос в stdout (видно в docker logs)
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--access-logfile", "-", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--access-logfile", "-", "app:app"]

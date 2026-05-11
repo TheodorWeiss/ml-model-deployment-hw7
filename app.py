@@ -5,22 +5,33 @@ import pickle
 from pathlib import Path
 
 from flask import Flask, jsonify, request
+from prometheus_client import Counter
+from prometheus_flask_exporter import PrometheusMetrics
 
-# Логирование вместо print (на консультации преподаватель отдельно
-# отметил, что print в серверном коде - плохая практика)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("ml-service")
 
-# Конфигурация из переменных окружения - так в Docker / CI мы сможем
-# подменять версию модели и путь к артефактам без пересборки образа
 MODEL_VERSION = os.environ.get("MODEL_VERSION", "v1.0.0")
 MODEL_PATH = os.environ.get("MODEL_PATH", "artifacts/model.pkl")
 METRICS_PATH = os.environ.get("METRICS_PATH", "artifacts/metrics.json")
 
 app = Flask(__name__)
+
+# Prometheus инструментация. Автоматически добавляет /metrics endpoint
+# и трекает все HTTP-запросы: количество, латентность, статусы.
+prom_metrics = PrometheusMetrics(app)
+prom_metrics.info("app_info", "ML service info", version=MODEL_VERSION)
+
+# Кастомный счётчик предсказаний с разбивкой по классам.
+# Метка version будет добавлена самим Prometheus через scrape config.
+predictions_counter = Counter(
+    "predictions",
+    "Total predictions made, by predicted class",
+    ["class_name"],
+)
 
 
 def load_model():
@@ -43,8 +54,6 @@ def load_metrics():
         return json.load(f)
 
 
-# Грузим модель один раз при старте, чтобы /predict не делал
-# pickle.load на каждый запрос
 model = load_model()
 metrics = load_metrics()
 target_names = metrics.get("target_names", ["class_0", "class_1", "class_2"])
@@ -104,6 +113,9 @@ def predict():
             else str(prediction)
         )
 
+        # Инкрементируем счётчик предсказаний для Prometheus
+        predictions_counter.labels(class_name=class_name).inc()
+
         return jsonify({
             "status": "ok",
             "version": MODEL_VERSION,
@@ -112,8 +124,6 @@ def predict():
         }), 200
 
     except Exception as e:
-        # Логируем исключение, но наружу не отдаём - правило безопасности:
-        # клиент не должен видеть детали внутренних ошибок
         logger.exception(f"Prediction failed: {e}")
         return jsonify({
             "status": "error",
@@ -122,7 +132,6 @@ def predict():
 
 
 if __name__ == "__main__":
-    # Запуск в режиме разработки. В Docker мы будем использовать gunicorn
     port = int(os.environ.get("PORT", "8000"))
     logger.info(f"Starting Flask dev server on 0.0.0.0:{port}")
     app.run(host="0.0.0.0", port=port, debug=False)
