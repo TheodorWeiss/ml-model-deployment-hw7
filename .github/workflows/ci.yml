@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  train-and-validate:
+    name: Train model and validate artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run ML pipeline (train + save artifacts)
+        env:
+          MODEL_VERSION: ${{ secrets.MODEL_VERSION || 'v1.0.0' }}
+        run: python ml_pipeline.py
+
+      - name: Make pipeline reproducible
+        # Этот шаг переписан из шаблона ноутбука: вместо print с вопросом
+        # реально валидируем артефакты, как требует консультация
+        run: |
+          echo "Verifying artifacts exist..."
+          test -f artifacts/model.pkl
+          test -f artifacts/hyperparameters.json
+          test -f artifacts/metrics.json
+          echo ""
+          echo "Artifacts on disk:"
+          ls -la artifacts/
+          echo ""
+          echo "Hyperparameters:"
+          cat artifacts/hyperparameters.json
+          echo ""
+          echo "Metrics summary:"
+          python -c "import json; m=json.load(open('artifacts/metrics.json')); print(f\"Model version: {m['model_version']}\"); print(f\"Accuracy:      {m['accuracy']:.4f}\"); print(f\"Train/test:    {m['n_samples_train']}/{m['n_samples_test']}\")"
+
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-model-artifacts
+          path: artifacts/
+          retention-days: 30
+
+      - name: Validate secrets are configured
+        run: |
+          if [ -n "${{ secrets.MODEL_VERSION }}" ]; then
+            echo "MODEL_VERSION secret is set"
+          else
+            echo "MODEL_VERSION not set (using default v1.0.0)"
+          fi
+          if [ -n "${{ secrets.CLOUD_TOKEN }}" ]; then
+            echo "CLOUD_TOKEN secret is set"
+          else
+            echo "CLOUD_TOKEN secret is missing"
+          fi
