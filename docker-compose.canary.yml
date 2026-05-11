@@ -1,0 +1,30 @@
+services:
+  ml_service_v1:
+    image: ml-service:v1.0.0
+    container_name: ml_service_v1
+    environment:
+      - MODEL_VERSION=v1.0.0
+    restart: unless-stopped
+
+  ml_service_v2:
+    # Тот же образ - разница только в переменной окружения MODEL_VERSION.
+    # Это и есть весь смысл: одна сборка, две "логических версии"
+    image: ml-service:v1.0.0
+    container_name: ml_service_v2
+    environment:
+      - MODEL_VERSION=v1.1.0
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ml_nginx
+    ports:
+      - "8090:80"
+    volumes:
+      # Начальное состояние - 90/10. Файл монтируется внутрь контейнера.
+      # Переключение делаем через docker cp + nginx reload (см. ниже)
+      - ./nginx/nginx.90-10.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - ml_service_v1
+      - ml_service_v2
+    restart: unless-stopped
