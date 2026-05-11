@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # Скрейпим v1.0.0 — каждой метрике добавляется label version="v1.0.0"
+  - job_name: "ml_service_v1"
+    static_configs:
+      - targets: ["ml_service_v1:8000"]
+        labels:
+          version: "v1.0.0"
+
+  # Скрейпим v1.1.0 — label version="v1.1.0"
+  - job_name: "ml_service_v2"
+    static_configs:
+      - targets: ["ml_service_v2:8000"]
+        labels:
+          version: "v1.1.0"
+
+  # Полезная привычка - Prometheus сам себя мониторит
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
