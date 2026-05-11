@@ -7,11 +7,10 @@ on:
 
 permissions:
   contents: read
-  packages: write  # нужно для push в ghcr.io
+  packages: write
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-deploy:
@@ -29,6 +28,12 @@ jobs:
             exit 1
           fi
           echo "All required secrets are configured"
+
+      - name: Set lowercase image name
+        # GHCR требует имя репозитория в нижнем регистре,
+        # а ${{ github.repository }} сохраняет регистр username'а
+        run: |
+          echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
